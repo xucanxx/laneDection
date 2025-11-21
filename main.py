@@ -62,7 +62,7 @@ def pipeline(img, s_thresh=(170, 255), sx_thresh=(40, 200)):
     # 复制原图像
     img = np.copy(img)
     # 颜色空间转换
-    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS).astype(np.float)
+    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS).astype(float)
     l_chanel = hls[:, :, 1]
     s_chanel = hls[:, :, 2]
     # sobel边缘检测
@@ -122,13 +122,13 @@ def cal_line_param(binary_warped):
     histogram = np.sum(binary_warped[:, :], axis=0)
     # 在统计结果中找到左右最大的点的位置，作为左右车道检测的开始点
     # 将统计结果一分为二，划分为左右两个部分，分别定位峰值位置，即为两条车道的搜索位置
-    midpoint = np.int(histogram.shape[0] / 2)
+    midpoint = int(histogram.shape[0] / 2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
     # 2.滑动窗口检测车道线
     # 设置滑动窗口的数量，计算每一个窗口的高度
     nwindows = 9
-    window_height = np.int(binary_warped.shape[0] / nwindows)
+    window_height = int(binary_warped.shape[0] / nwindows)
     # 获取图像中不为0的点
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
@@ -166,9 +166,9 @@ def cal_line_param(binary_warped):
 
         # 如果获取的点的个数大于最小个数，则利用其更新滑动窗口在x轴的位置
         if len(good_left_inds) > minpix:
-            leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
+            leftx_current = int(np.mean(nonzerox[good_left_inds]))
         if len(good_right_inds) > minpix:
-            rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+            rightx_current = int(np.mean(nonzerox[good_right_inds]))
 
     # 将检测出的左右车道点转换为array
     left_lane_inds = np.concatenate(left_lane_inds)
@@ -181,8 +181,14 @@ def cal_line_param(binary_warped):
     righty = nonzeroy[right_lane_inds]
 
     # 3.用曲线拟合检测出的点,二次多项式拟合，返回的结果是系数
-    left_fit = np.polyfit(lefty, leftx, 2)
-    right_fit = np.polyfit(righty, rightx, 2)
+    if len(leftx) == 0 or len(lefty) == 0:
+        left_fit = None  # 或者 [0,0,0]，根据后续逻辑调整
+    else:
+        left_fit = np.polyfit(lefty, leftx, 2)
+    if len(rightx) == 0 or len(righty) == 0:
+        right_fit = None  # 或者 [0,0,0]，根据后续逻辑调整
+    else:
+        right_fit = np.polyfit(righty, rightx, 2)
     return left_fit, right_fit
 
 # 填充车道线之间的多边形
@@ -192,16 +198,20 @@ def fill_lane_poly(img, left_fit, right_fit):
     # 设置输出图像的大小，并将白色位置设为255
     out_img = np.dstack((img, img, img)) * 255
     # 在拟合曲线中获取左右车道线的像素位置
+    if left_fit is None or right_fit is None:
+        return out_img
     left_points = [[left_fit[0] * y ** 2 + left_fit[1] * y + left_fit[2], y] for y in range(y_max)]
     right_points = [[right_fit[0] * y ** 2 + right_fit[1] * y + right_fit[2], y] for y in range(y_max - 1, -1, -1)]
-    # 将左右车道的像素点进行合并
+    if len(left_points) == 0 or len(right_points) == 0:
+        return out_img
     line_points = np.vstack((left_points, right_points))
-    # 根据左右车道线的像素位置绘制多边形
     cv2.fillPoly(out_img, np.int_([line_points]), (0, 255, 0))
     return out_img
 
 # 计算车道线曲率
 def cal_radius(img,left_fit,right_fit):
+    if left_fit is None or right_fit is None:
+        return img
     # 比例
     ym_per_pix = 30/720
     xm_per_pix = 3.7/700
@@ -236,6 +246,8 @@ def cal_line_center(img):
 
 def cal_center_departure(img,left_fit,right_fit):
     # 计算中心点
+    if left_fit is None or right_fit is None:
+        return img
     y_max = img.shape[0]
     left_x = left_fit[0]*y_max**2 + left_fit[1]*y_max +left_fit[2]
     right_x = right_fit[0]*y_max**2 +right_fit[1]*y_max +right_fit[2]
@@ -333,7 +345,7 @@ def process_image(img):
     return transform_img_inv
 
 # 视频处理
-clip1 = VideoFileClip("project_video.mp4")
+clip1 = VideoFileClip("video.mp4")
 white_clip = clip1.fl_image(process_image)
 # white_clip.ipython_display()
 white_clip.write_videofile("output.mp4",audio=False)
